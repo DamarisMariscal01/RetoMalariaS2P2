@@ -1,0 +1,174 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+import csv
+
+NUM_PARTICULAS = 40
+PASOS_TIEMPO = 240
+NUM_CARGAS = 500
+dt = 0.01 # Que tan rapido se mueve el tiempo en cada iteracion
+
+## Creacion de placas
+# Placa positiva mas larga para que no caigan en linea recta las particulas
+cargas_pos_y = np.linspace(-3.5, 3.5, NUM_CARGAS)
+cargas_pos_x = np.full_like(cargas_pos_y, -1.0)
+
+# Placa negativa
+cargas_neg_y = np.linspace(-2.0, 2.0, NUM_CARGAS)
+cargas_neg_x = np.full_like(cargas_neg_y, 1.0)
+
+## Posiciones de inicio de las particulas
+pos_x = np.random.uniform(-0.2, 0.2, NUM_PARTICULAS)
+pos_y = np.full(NUM_PARTICULAS, 4.0)
+
+# Velocidades iniciales (empiezan cayendo hacia abajo)
+vel_x = np.zeros(NUM_PARTICULAS)
+vel_y = np.full(NUM_PARTICULAS, -5.0) # Le damos un empujon hacia abajo para que sigan mejor la tratectoria
+
+# Se dividen a la mitad (20 sanas y 20 infectadas)
+estados = ["Sana"] * 20 + ["Infectada"] * 20
+
+# Las afectadas SIEMPRE reaccionaran mas al campo electrico
+sensibilidad_electrica = np.array([0.5] * 20 + [1.8] * 20)
+
+posiciones_finales_x = []
+posiciones_finales_y = []
+
+# Se guarda la posicion anterior de cada particula para graficar una trayectoria
+historial_x = [[] for _ in range(NUM_PARTICULAS)]
+historial_y = [[] for _ in range(NUM_PARTICULAS)]
+
+for i in range(NUM_PARTICULAS):
+    x, y= pos_x[i], pos_y[i]
+    vx, vy = vel_x[i], vel_y[i]
+    sensibilidad = sensibilidad_electrica[i]
+
+    for _ in range(PASOS_TIEMPO):
+        # SE guarda la piscion actual de la particula antes de moverla
+        historial_x[i].append(x)
+        historial_y[i].append(y)
+
+        fuerza_x = 0
+
+        # Fuerza que ejerce la placa positiva
+        for cx, cy in zip(cargas_pos_x, cargas_pos_y):
+            distancia = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+            fuerza_x += 1 / (distancia ** 2 + 0.1)
+
+        # Fuerza que ejerce la placa negativa
+        for cx, cy in zip(cargas_neg_x, cargas_neg_y):
+            distancia = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+            fuerza_x += 1 / (distancia ** 2 + 0.1)
+
+        # Se aplica la desviacion
+        aceleracion_x = fuerza_x * sensibilidad * 0.001
+
+        # Se actualiza la posicion y velocidad
+        vx += aceleracion_x * dt
+        x += vx * dt
+        y += vy * dt # Continua cayendo
+
+    posiciones_finales_x.append(x)
+    posiciones_finales_y.append(y)
+
+nombre_archivo = 'simulacion_limpia_particulas_v2.csv'
+
+with open(nombre_archivo, 'w', newline='') as archivo:
+    escritor = csv.writer(archivo)
+    # Encabezados de tus columnas
+    escritor.writerow(['ID', 'X_final', 'Y_final', 'Estado'])
+    
+    for i in range(NUM_PARTICULAS):
+        escritor.writerow([i+1, posiciones_finales_x[i], posiciones_finales_y[i], estados[i]])
+
+print(f"¡Simulación terminada! El archivo {nombre_archivo} está listo para usarse.")
+
+# Se grafica la trayectoria como animacion
+fig, ax = plt.subplots(figsize=(8, 10))
+fig.patch.set_facecolor('#071018')
+ax.set_facecolor('#0a1722')
+
+# Fondo sutil tipo laboratorio para que la presentacion se vea menos plana
+gradiente = np.linspace(0.15, 0.85, 256).reshape(256, 1)
+ax.imshow(
+    gradiente,
+    extent=[-5, 5, -5, 5],
+    origin='lower',
+    cmap='GnBu',
+    alpha=0.18,
+    aspect='auto',
+    zorder=0
+)
+
+# Campo visual translucido alrededor de las placas. Es decorativo: no cambia la simulacion.
+campo_x, campo_y = np.meshgrid(np.linspace(-5, 5, 220), np.linspace(-5, 5, 220))
+campo_positivo = np.exp(-((campo_x + 1.0) ** 2) / 0.55) * np.exp(-(campo_y ** 2) / 18)
+campo_negativo = np.exp(-((campo_x - 1.0) ** 2) / 0.55) * np.exp(-(campo_y ** 2) / 18)
+ax.contourf(campo_x, campo_y, campo_positivo, levels=10, cmap='Reds', alpha=0.16, zorder=1)
+ax.contourf(campo_x, campo_y, campo_negativo, levels=10, cmap='Blues', alpha=0.16, zorder=1)
+
+# Dibujamos las placas como particulas cargadas con un brillo suave
+ax.scatter(cargas_pos_x, cargas_pos_y, s=160, c='#ff6b6b', alpha=0.16, edgecolors='none', zorder=2)
+ax.scatter(cargas_neg_x, cargas_neg_y, s=160, c='#5dade2', alpha=0.16, edgecolors='none', zorder=2)
+ax.scatter(cargas_pos_x, cargas_pos_y, s=58, c='#ff3b30', marker='$+$', linewidths=1.3, label="Cargas positivas (+)", zorder=4)
+ax.scatter(cargas_neg_x, cargas_neg_y, s=58, c='#48a6ff', marker='$-$', linewidths=1.3, label="Cargas negativas (-)", zorder=4)
+
+# Creamos una linea vacia para cada particula; se llenara durante la animacion
+lineas = []
+for estado in estados:
+    color = '#7CFF8A' if estado == "Sana" else '#FF4F5E'
+    linea, = ax.plot([], [], color=color, alpha=0.72, linewidth=1.9, zorder=3)
+    lineas.append(linea)
+
+colores_particulas = ['#7CFF8A' if estado == "Sana" else '#FF4F5E' for estado in estados]
+cabezas = ax.scatter(
+    pos_x,
+    pos_y,
+    c=colores_particulas,
+    edgecolors='white',
+    linewidths=0.8,
+    s=64,
+    zorder=5
+)
+
+# Detalles visuales de la grafica
+ax.set_title("Separacion de Globulos por Campo Electrico", color='white', fontsize=16, fontweight='bold', pad=16)
+ax.set_xlim(-5, 5)
+ax.set_ylim(-5, 5)
+ax.set_xlabel("Posicion X", color='#d7eef7')
+ax.set_ylabel("Posicion Y", color='#d7eef7')
+ax.tick_params(colors='#b7d7e2')
+ax.grid(True, color='white', linestyle='--', linewidth=0.6, alpha=0.18)
+
+for borde in ax.spines.values():
+    borde.set_color('#7fb8c9')
+    borde.set_alpha(0.45)
+
+# Entradas extra para que la leyenda explique los colores de las particulas
+ax.plot([], [], color='#7CFF8A', linewidth=2.5, label="Globulos sanos")
+ax.plot([], [], color='#FF4F5E', linewidth=2.5, label="Globulos infectados")
+leyenda = ax.legend(facecolor='#0d1b2a', edgecolor='#7fb8c9', framealpha=0.88, loc='upper right')
+for texto in leyenda.get_texts():
+    texto.set_color('white')
+
+def actualizar(frame):
+    posiciones_actuales = []
+
+    for i, linea in enumerate(lineas):
+        linea.set_data(historial_x[i][:frame], historial_y[i][:frame])
+        posiciones_actuales.append([historial_x[i][frame - 1], historial_y[i][frame - 1]])
+
+    cabezas.set_offsets(posiciones_actuales)
+    return lineas + [cabezas]
+
+animacion = FuncAnimation(
+    fig,
+    actualizar,
+    frames=range(1, PASOS_TIEMPO + 1),
+    interval=50,
+    blit=True,
+    repeat=False
+)
+
+# Mostramos la ventana animada
+plt.show()
