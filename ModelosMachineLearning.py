@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 # ============================================================
 # Se carga el archivo generado previamente con la simulación
 
-archivo_csv = "separacion_celular_RK4.csv"
+archivo_csv = "resultados_globulos.csv"
 
 try:
     df = pd.read_csv(archivo_csv)
